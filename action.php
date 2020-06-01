@@ -1,41 +1,49 @@
 
 <?php
 
-include('db.php');
+require_once('db.php');
 
 // Pasiimti failus .csv formatu ir juos apdoroti
 
 $csv = array_map('str_getcsv', file('./file.csv'));
-for ($i = 1; $i < count($csv); $i++) {
-    $result[] = (explode(';', $csv[$i][0]));
+foreach ($csv as  $key => $value) {
+    if ($key < 1) continue;
+    $result[] = explode(';', $value[0]);
 }
 
-// Apdoroti duomenys
-
-function test_input($data)
+function testInput($data)
 {
     return htmlspecialchars(stripslashes(trim($data)));
 }
 
-
 // Išvesti rezultatus į puslapį iš .csv failo.
 
-for ($i = 0; $i < count($result); $i++) {
+foreach ($result as  $value) {
 
-    $site = test_input($result[$i][0]);
-    $alexaRank = test_input($result[$i][1]);
-    $visitors = test_input(($result[$i][2]));
+    // Pakeičiam iš numeric arrays to associative arrays
+
+    $value['site'] = $value[0];
+    unset($value[0]);
+    $value['alexaRanks'] = $value[1];
+    unset($value[1]);
+    $value['visitors'] = $value[2];
+    unset($value[2]);
+
+    $site = testInput($value['site']);
+    $alexaRank = testInput($value['alexaRanks']);
+    $visitors = testInput($value['visitors']);
 
     echo '<tr class="value"><td>' . $site . '</td><td>' .
-        $alexaRank . '</td><td>' . checkvisitors($visitors, $alexaRank)
+        $alexaRank . '</td><td>' . checkVisitors($visitors, $alexaRank)
         . '</td></tr>';
 }
+
 // Alexa Rank ^(-0.732) * 7,000,000 - formule visitors to found
 
-// Funkcija patikrinti visitorus ir apskaičiuoti
-function checkvisitors($visitors, $alexa)
+// Funkcija patikrinti ar yra įvesti duomenys į visitor laukeli jeigu nėra apskaičiuoti
+function checkVisitors($visitors, $alexa)
 {
-    if ($visitors == null) {
+    if (empty($visitors)) {
         $visitors = pow($alexa, -0.732) * 7000000;
         return round($visitors);
     } else {
@@ -43,29 +51,38 @@ function checkvisitors($visitors, $alexa)
     }
 }
 
-foreach ($result as $val) {
-    // panaudojam funkcija patikrinti visitors
-    $visitors = checkvisitors($val[2], $val[1]);
-    // Pasirenkam ar yra tokie puslapiai
-    $dublicate = "SELECT `site`, `alexa_ranks`, `visitors` FROM `duomenys` where site='$val[0]'";
-    $querry = mysqli_query($conn, $dublicate);
-    if (mysqli_num_rows($querry) > 0) {
-        while ($row = mysqli_fetch_assoc($querry)) {
+$dublicate = "SELECT `site`, `alexa_ranks`, `visitors` FROM `duomenys` where site=?";
 
-            // Jeigu randam atnaujinam
-            $update = "UPDATE `duomenys` SET `alexa_ranks` = '$val[1]', `visitors` = '$visitors' WHERE `duomenys`.`site` = '$val[0]'";
-            mysqli_query($conn, $update);
+$add = "INSERT INTO `duomenys` (`id`, `site`, `alexa_ranks`, `visitors`, `data_created`, `data_updated`) VALUES (NULL, ?, ?, ?, current_timestamp(), current_timestamp())";
+
+$update = "UPDATE `duomenys` SET `alexa_ranks` = ?, `visitors` = ? WHERE `duomenys`.`site` = ?";
+
+foreach ($result as list($site, $alexaRank, $visitors)) {
+
+    // // panaudojam funkcija patikrinti visitors
+    $visitors = checkVisitors($visitors, $alexaRank);
+
+    // // Pasirenkam ar yra tokie puslapiai
+    $stmt = mysqli_stmt_init($conn);
+
+    if (mysqli_stmt_prepare($stmt, $dublicate)) {
+        mysqli_stmt_bind_param($stmt, "s", $site);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+
+        if (mysqli_num_rows($result) > 0) {
+
+            while ($row = mysqli_fetch_assoc($result)) {
+                // Jeigu randam atnaujinam
+                mysqli_stmt_prepare($stmt, $update);
+                mysqli_stmt_bind_param($stmt, "iis", $alexaRank, $visitors, $site);
+                mysqli_stmt_execute($stmt);
+            }
+        }  //  Jeigu nera tokiu pat site pridedam i db
+        else {
+            mysqli_stmt_prepare($stmt, $add);
+            mysqli_stmt_bind_param($stmt, "sii", $site, $alexaRank, $visitors);
+            mysqli_stmt_execute($stmt);
         }
-        //  Jeigu nera tokiu pat site pridedam i db
-    } else {
-
-        $val[0] = mysqli_real_escape_string($conn, $val[0]);
-        $val[1] = mysqli_real_escape_string($conn, $val[1]);
-        $val[2] = mysqli_real_escape_string($conn, $val[2]);
-
-        $add = "INSERT INTO `duomenys` (`id`, `site`, `alexa_ranks`, `visitors`, `data_created`, `data_updated`) VALUES (NULL, '$val[0]', '$val[1]', '$visitors', current_timestamp(), current_timestamp())";
-        mysqli_query($conn, $add);
     }
 }
-
-?>
