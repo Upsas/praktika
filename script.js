@@ -20,7 +20,12 @@ searchBox.addEventListener("keyup", (e) => {
     } else {
       item.closest(".value").style.display = "none";
     }
-    let results = document.querySelector(".results");
-    results.innerHTML = `<h3>${term} ( ${count} result(s))</h3>`;
+    if (term != "") {
+      let results = document.querySelector(".results");
+      results.innerHTML = `<h3>${term} ( ${count} result(s))</h3>`;
+    } else {
+      let results = document.querySelector(".results");
+      results.innerHTML = "<h3> --- ( %--% result(s))</h3>";
+    }
   });
 });
